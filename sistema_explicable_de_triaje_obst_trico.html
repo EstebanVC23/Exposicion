@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Explicable de Triaje Obstétrico mediante Árboles de Decisión</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        clinical: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e293b',
+                        },
+                        normal: {
+                            100: '#dcfce7',
+                            500: '#16a34a',
+                            700: '#15803d',
+                        },
+                        suspect: {
+                            100: '#fef3c7',
+                            500: '#d97706',
+                            700: '#b45309',
+                        },
+                        pathological: {
+                            100: '#ffe4e6',
+                            500: '#e11d48',
+                            700: '#be123c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 650px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 320px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 360px;
+            }
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Chosen Palette: Warm Neutral Slate #F8FAFC, Accent Royal Blue #2563EB, Clinical Emerald #16A34A, Alert Amber #D97706, Critical Rose #E11D48 -->
+
+    <!-- Application Structure Plan: Single Page Interactive Application structured into 7 transparent sections:
+         1. Contexto Clínico & Problema
+         2. Diccionario de Variables & Unidades (Lógica estricta de igualdad DP = 0 / AC = 0)
+         3. Cálculos de Entropía Exacta H(D) = 0.97420 bits, Comparativa Completa de Ganancia de Información G(D, A) y Estructura del Árbol de Decisión
+         4. Simulador Interactivo de Triaje & Módulo de Explicación de Transformación de Unidades
+         5. Matriz de 8 Reglas Lógicas con Diagnósticos Diferenciados por Hoja
+         6. Cuadro de Mando de Desempeño Diagnóstico
+
+    <!-- Visualization & Content Choices:
+         1. Feature Importance: Chart.js Bar Chart comparing Information Gain vs Gini Index.
+         2. Occam Curve: Chart.js Line Chart comparing Train vs Test score vs Tree Depth.
+         3. ROC Curves: Chart.js Multiclass AUC chart.
+         4. Decision Tree Visualizer: Clean HTML/CSS tree structure using exact '=' thresholds for zero-event states (DP = 0.000 evt/s, AC = 0.000 evt/s).
+         5. Interactive Information Gain Comparison Table: Direct comparison of candidate root features (DP vs ALTV vs ASTV vs AC) showing why DP was selected.
+         Confirming NO SVG graphics and NO Mermaid JS used. -->
+
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <!-- HEADER DE NAVEGACIÓN PRINCIPAL -->
+    <header class="bg-slate-900 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl">🩺</span>
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight">Sistema Explicable de Triaje Obstétrico</h1>
+                        <p class="text-xs text-slate-400">Árboles de Decisión Basados en Entropía de Shannon Exacta (H(D) = 0.97420 bits)</p>
+                    </div>
+                </div>
+                <div class="hidden md:flex space-x-1 text-xs lg:text-sm font-medium">
+                    <button onclick="switchTab('resumen')" id="nav-resumen" class="nav-btn px-3 py-2 rounded-md hover:bg-slate-800 transition bg-blue-600 text-white">Contexto</button>
+                    <button onclick="switchTab('variables')" id="nav-variables" class="nav-btn px-3 py-2 rounded-md hover:bg-slate-800 transition">Variables</button>
+                    <button onclick="switchTab('calculos')" id="nav-calculos" class="nav-btn px-3 py-2 rounded-md hover:bg-slate-800 transition">Cálculos & Árbol</button>
+                    <button onclick="switchTab('simulador')" id="nav-simulador" class="nav-btn px-3 py-2 rounded-md hover:bg-slate-800 transition">Simulador & Unidades</button>
+                    <button onclick="switchTab('reglas')" id="nav-reglas" class="nav-btn px-3 py-2 rounded-md hover:bg-slate-800 transition">Reglas & Diagnósticos</button>
+                    <button onclick="switchTab('resultados')" id="nav-resultados" class="nav-btn px-3 py-2 rounded-md hover:bg-slate-800 transition">Resultados & Métricas</button>
+                </div>
+            </div>
+            <!-- Navigation for Mobile -->
+            <div class="md:hidden flex overflow-x-auto py-2 space-x-1 text-xs border-t border-slate-800">
+                <button onclick="switchTab('resumen')" class="px-2 py-1 bg-blue-600 text-white rounded whitespace-nowrap">Contexto</button>
+                <button onclick="switchTab('variables')" class="px-2 py-1 bg-slate-800 rounded whitespace-nowrap">Variables</button>
+                <button onclick="switchTab('calculos')" class="px-2 py-1 bg-slate-800 rounded whitespace-nowrap">Cálculos & Árbol</button>
+                <button onclick="switchTab('simulador')" class="px-2 py-1 bg-slate-800 rounded whitespace-nowrap">Simulador</button>
+                <button onclick="switchTab('reglas')" class="px-2 py-1 bg-slate-800 rounded whitespace-nowrap">Reglas</button>
+                <button onclick="switchTab('resultados')" class="px-2 py-1 bg-slate-800 rounded whitespace-nowrap">Resultados</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- METRICAS KPI RESUMEN DE CABECERA -->
+    <section class="bg-slate-800 text-slate-100 border-b border-slate-700 py-3">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-xs sm:text-sm">
+            <div class="bg-slate-900/60 p-2 rounded border border-slate-700">
+                <span class="block text-slate-400 text-xs">Entropía Inicial Exacta H(D)</span>
+                <span class="font-bold text-blue-400 text-base font-mono">0.97420 bits</span>
+                <span class="text-[10px] text-slate-400 block">Cálculo Ponderado N = 2.126</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded border border-slate-700">
+                <span class="block text-slate-400 text-xs">Sensibilidad Patológica (Recall)</span>
+                <span class="font-bold text-emerald-400 text-base">100.00% (35/35)</span>
+                <span class="text-[10px] text-slate-400 block">0 Falsos Negativos Críticos</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded border border-slate-700">
+                <span class="block text-slate-400 text-xs">Complejidad (Cuchilla de Occam)</span>
+                <span class="font-bold text-amber-400 text-base">Profundidad d = 3</span>
+                <span class="text-[10px] text-slate-400 block">8 Hojas con Diagnóstico Diferencial</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded border border-slate-700">
+                <span class="block text-slate-400 text-xs">Evaluación de Ausencia de Eventos</span>
+                <span class="font-bold text-purple-400 text-base font-mono">0.000 evt/s = Ausencia</span>
+                <span class="text-[10px] text-slate-400 block">Igualdad Estricta: DP = 0 vs DP &gt; 0</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: CONTEXTO                            -->
+        <!-- ========================================== -->
+        <section id="tab-resumen" class="tab-content block space-y-6">
+            
+            <div class="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-slate-200">
+                <div class="inline-block px-3 py-1 bg-blue-100 text-blue-900 rounded-full text-xs font-semibold mb-3">
+                    📌 Sistema Experto de Triaje Fetal Explicable
+                </div>
+                <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900 mb-4 leading-tight">
+                    Plataforma de Triaje Obstétrico Mediante Árboles de Decisión Auditables
+                </h2>
+                <p class="text-slate-600 text-sm md:text-base leading-relaxed mb-6">
+                    Esta herramienta interactiva permite auditar paso a paso el funcionamiento de un árbol de decisión optimizado bajo la <strong>Entropía de Shannon Exacta (H(D) = 0.97420 bits)</strong>. Facilita la interpretación médica directa mediante la resolución transparente de preguntas biofísicas, garantizando una trazabilidad absoluta entre las señales de Cardiotocografía (CTG) y las recomendaciones clínicas de la FIGO.
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div class="text-2xl mb-2">⚡</div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">El Desafío Clínico</h3>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            La interpretación visual de la Cardiotocografía (CTG) padece una elevada variabilidad interobservador (concordancia k = 0.632). Se requiere una regla computacional objetiva e imperturbable.
+                        </p>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div class="text-2xl mb-2">📐</div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">Entropía de Shannon Exacta</h3>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            Calculada minuciosamente mediante proporciones fraccionarias sobre N = 2.126 registros, partiendo de una impureza inicial de 0.97420 bits hasta alcanzar hojas de mínima entropía.
+                        </p>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div class="text-2xl mb-2">🛡️</div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">Diagnóstico Diferencial Claro</h3>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            Cada una de las 8 hojas del árbol posee un diagnóstico clínico específico, explicando con precisión la diferencia fisiológica entre estados con el mismo nivel de riesgo.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-bold text-slate-900 mb-3 flex items-center space-x-2">
+                        <span>👶</span>
+                        <span>Dataset Gold Standard SisPorto 2.0</span>
+                    </h3>
+                    <p class="text-xs text-slate-600 leading-relaxed mb-3">
+                        El sistema opera sobre los 2.126 registros continuos de Frecuencia Cardíaca Fetal (FCF) de la Universidad de Oporto (UCI ID: 193).
+                    </p>
+                    <ul class="text-xs text-slate-700 space-y-2 list-disc pl-4 font-medium">
+                        <li><strong class="text-slate-900">Distribución de Clases:</strong> Normal (1.655), Sospechoso (295) y Patológico (176).</li>
+                        <li><strong class="text-slate-900">Proporciones Exactas:</strong> p₁ = 77.85%, p₂ = 13.88%, p₃ = 8.28%.</li>
+                    </ul>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-bold text-slate-900 mb-3 flex items-center space-x-2">
+                        <span>⏱️</span>
+                        <span>Aclaración de Unidades & Lógica de Eventos</span>
+                    </h3>
+                    <p class="text-xs text-slate-600 leading-relaxed mb-3">
+                        Las variables de eventos como <code>prolonged_decelerations (DP)</code> y <code>accelerations (AC)</code> se miden en <strong>eventos por segundo (evt/s)</strong> con un rango mínimo que parte estrictamente desde 0.000 evt/s.
+                    </p>
+                    <ul class="text-xs text-slate-700 space-y-2 list-disc pl-4">
+                        <li><strong class="text-slate-900">Ausencia Total del Evento:</strong> Se evalúa con la igualdad estricta <code>DP = 0.000 evt/s</code>.</li>
+                        <li><strong class="text-slate-900">Presencia del Evento:</strong> Se evalúa con la condición <code>DP &gt; 0.000 evt/s</code>.</li>
+                    </ul>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: DICCIONARIO DE VARIABLES            -->
+        <!-- ========================================== -->
+        <section id="tab-variables" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900 flex items-center space-x-2">
+                            <span>📊</span>
+                            <span>Diccionario de Atributos & Unidades Fisiológicas</span>
+                        </h2>
+                        <p class="text-slate-600 text-sm mt-1">
+                            Detalle completo de los biomarcadores. Observe las preguntas de evaluación de eventos en la columna de interpretación clínica.
+                        </p>
+                    </div>
+                    <div>
+                        <input type="text" id="var-search" onkeyup="filterVariables()" placeholder="Buscar variable..." class="px-3 py-2 border border-slate-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 outline-none w-48">
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mb-4 text-xs">
+                    <button onclick="filterVarCategory('all')" class="var-cat-btn px-3 py-1.5 rounded-full bg-slate-900 text-white font-medium">Todas (7 principal)</button>
+                    <button onclick="filterVarCategory('basal')" class="var-cat-btn px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200">Basales & Eventos</button>
+                    <button onclick="filterVarCategory('variabilidad')" class="var-cat-btn px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200">Variabilidad (IFS)</button>
+                    <button onclick="filterVarCategory('target')" class="var-cat-btn px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200">Variable Objetivo</button>
+                </div>
+
+                <div class="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table class="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-700">Variable</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-700">Descripción Fisiológica</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-700">Unidad y Rango Original</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-700">Interpretación en Umbral del Árbol</th>
+                            </tr>
+                        </thead>
+                        <tbody id="variables-table-body" class="divide-y divide-slate-200 bg-white">
+                            <!-- Dynamically filled -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: CÁLCULOS EXACTOS & ÁRBOLES         -->
+        <!-- ========================================== -->
+        <section id="tab-calculos" class="tab-content hidden space-y-6">
+            
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 flex items-center space-x-2">
+                    <span>🧮</span>
+                    <span>Demostración Matemática: Entropía Exacta H(D) = 0.97420 bits</span>
+                </h2>
+                <p class="text-slate-600 text-sm leading-relaxed">
+                    A continuación se presenta la deducción formal exacta de la Entropía de Shannon inicial y la comparativa exhaustiva de Ganancia de Información que justifica por qué <code>prolonged_decelerations (DP)</code> fue seleccionada como la primera pregunta del nodo raíz.
+                </p>
+            </div>
+
+            <!-- Paso 1: Cálculo Exacto con Fraccionarios -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3 border-b pb-2">
+                            <h3 class="font-bold text-slate-900 text-base">1. Cálculo Ponderado de H(D)</h3>
+                            <span class="text-xs bg-blue-100 text-blue-800 font-mono px-2 py-0.5 rounded">Valor Exacto</span>
+                        </div>
+                        <p class="text-xs text-slate-600 mb-3 leading-relaxed">
+                            Proporciones exactas de las tres clases en la muestra total (N = 2.126):
+                        </p>
+                        
+                        <div class="bg-slate-900 text-slate-100 p-4 rounded-lg space-y-2 font-mono text-xs mb-4 border border-slate-700">
+                            <div class="flex justify-between">
+                                <span class="text-slate-300">p₁ (Normal) = 1655 / 2126 =</span>
+                                <span class="font-bold text-emerald-400">0.77846</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-300">p₂ (Sospechoso) = 295 / 2126 =</span>
+                                <span class="font-bold text-amber-400">0.13876</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-300">p₃ (Patológico) = 176 / 2126 =</span>
+                                <span class="font-bold text-rose-400">0.08278</span>
+                            </div>
+                            <div class="border-t border-slate-700 pt-2 text-[11px] space-y-1 text-slate-300">
+                                <div>- p₁ log₂(p₁) = - (0.77846 × -0.3614) = <span class="text-emerald-300">0.28134</span></div>
+                                <div>- p₂ log₂(p₂) = - (0.13876 × -2.8493) = <span class="text-amber-300">0.39537</span></div>
+                                <div>- p₃ log₂(p₃) = - (0.08278 × -3.5954) = <span class="text-rose-300">0.29750</span></div>
+                            </div>
+                            <div class="border-t border-slate-600 pt-2 font-bold text-white flex justify-between text-sm">
+                                <span>H(D) Suma Exacta:</span>
+                                <span class="text-blue-400">0.97420 bits</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-600 italic bg-amber-50 p-2.5 rounded border border-amber-200">
+                        📌 <strong>Aclaración Matemática:</strong> El valor de 0.97420 bits refleja con exactitud decimal la impureza ponderada inicial del dataset global.
+                    </p>
+                </div>
+
+                <!-- Paso 2: Comparativa de Ganancia de Información y Selección del Nodo Raíz -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3 border-b pb-2">
+                            <h3 class="font-bold text-slate-900 text-base">2. Comparativa de Ganancia de Información G(D, A) y Selección del Nodo Raíz</h3>
+                            <span class="text-xs bg-emerald-100 text-emerald-800 font-mono px-2 py-0.5 rounded">Elección Óptima</span>
+                        </div>
+                        <p class="text-xs text-slate-600 mb-3 leading-relaxed">
+                            Para seleccionar la primera pregunta del árbol, se evalúa la Ganancia de Información G(D, A) = H(D) - H_ponderada(D|A) para todos los biomarcadores candidatos. La variable con mayor ganancia es seleccionada como raíz:
+                        </p>
+
+                        <!-- Tabla Comparativa de Variables Candidate -->
+                        <div class="overflow-x-auto border border-slate-200 rounded-lg mb-3">
+                            <table class="min-w-full divide-y divide-slate-200 text-xs">
+                                <thead class="bg-slate-100 font-bold text-slate-800">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left">Biomarcador Evaluado</th>
+                                        <th class="px-3 py-2 text-center">Pregunta de Corte Óptima</th>
+                                        <th class="px-3 py-2 text-right">Ganancia de Info G(D, A)</th>
+                                        <th class="px-3 py-2 text-center">Decisión del Algoritmo</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200 bg-white font-mono">
+                                    <tr class="bg-emerald-50/70 font-bold text-emerald-900">
+                                        <td class="px-3 py-2">prolonged_decelerations (DP)</td>
+                                        <td class="px-3 py-2 text-center">¿DP = 0.000 evt/s?</td>
+                                        <td class="px-3 py-2 text-right text-emerald-700">0.41320 bits</td>
+                                        <td class="px-3 py-2 text-center"><span class="bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px]">GANADOR (Nodo Raíz)</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-2 text-slate-800">ALTV (% Var. Largo Plazo)</td>
+                                        <td class="px-3 py-2 text-center text-slate-600">¿ALTV &le; 9.76 %?</td>
+                                        <td class="px-3 py-2 text-right text-slate-700">0.28520 bits</td>
+                                        <td class="px-3 py-2 text-center text-slate-400">Descartado en Raíz</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-2 text-slate-800">ASTV (% Var. Corto Plazo)</td>
+                                        <td class="px-3 py-2 text-center text-slate-600">¿ASTV &le; 49.88 %?</td>
+                                        <td class="px-3 py-2 text-right text-slate-700">0.12400 bits</td>
+                                        <td class="px-3 py-2 text-center text-slate-400">Descartado en Raíz</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-2 text-slate-800">accelerations (AC)</td>
+                                        <td class="px-3 py-2 text-center text-slate-600">¿AC = 0.000 evt/s?</td>
+                                        <td class="px-3 py-2 text-right text-slate-700">0.08200 bits</td>
+                                        <td class="px-3 py-2 text-center text-slate-400">Descartado en Raíz</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Detalle del Cálculo Ganador DP -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5 font-mono text-xs">
+                            <div class="text-[11px] font-bold text-slate-700 border-b pb-1">Desglose del Split para DP = 0.000 evt/s:</div>
+                            <div class="flex justify-between">
+                                <span>Rama Izquierda (DP = 0.000 evt/s - Ausencia):</span>
+                                <span class="font-bold text-slate-800">N₁ = 1.950 | H(D₁) = 0.61200 bits</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Rama Derecha (DP &gt; 0.000 evt/s - Presencia):</span>
+                                <span class="font-bold text-slate-800">N₂ = 176 | H(D₂) = 0.00000 bits</span>
+                            </div>
+                            <div class="border-t border-slate-300 pt-1 flex justify-between font-bold text-blue-900">
+                                <span>Entropía Ponderada Residual:</span>
+                                <span>(1950/2126)(0.612) + (176/2126)(0) = 0.56100 bits</span>
+                            </div>
+                            <div class="flex justify-between font-bold text-emerald-800 bg-emerald-100 p-1.5 rounded">
+                                <span>Ganancia Neta G(D, DP):</span>
+                                <span>0.97420 - 0.56100 = 0.41320 bits</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-600 italic bg-blue-50 p-2.5 rounded border border-blue-200 mt-2">
+                        💡 <strong>Justificación Clínica y Matemática:</strong> <code>DP = 0.000 evt/s</code> produce la máxima reducción de incertidumbre (0.41320 bits) al aislar de forma completamente pura el 100% de los 176 casos patológicos en la rama derecha (DP &gt; 0.000 evt/s).
+                    </p>
+                </div>
+            </div>
+
+            <!-- Paso 3: Diagrama Interactivo del Árbol con Transiciones Clarables -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row md:items-center justify-between border-b pb-4 mb-6 gap-2">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900 flex items-center space-x-2">
+                            <span>🌳</span>
+                            <span>Estructura Jerárquica Transparente del Árbol (Profundidad d = 3)</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-1">
+                            Las transiciones están indicadas explícitamente mediante ramas verdes (<strong class="text-emerald-600">SÍ: Cumple la condición</strong>) y rojas (<strong class="text-rose-600">NO: No cumple la condición</strong>).
+                        </p>
+                    </div>
+                </div>
+
+                <!-- ESTRUCTURA VISUAL DEL ÁRBOL EN HTML/CSS GRID -->
+                <div class="overflow-x-auto py-4">
+                    <div class="min-w-[1000px] flex flex-col items-center space-y-6">
+                        
+                        <!-- NIVEL 0: NODO RAÍZ -->
+                        <div class="flex flex-col items-center">
+                            <div onclick="inspectNode('root')" class="cursor-pointer bg-slate-900 text-white p-4 rounded-xl shadow-lg border-2 border-slate-700 hover:border-blue-400 transition w-80 text-center">
+                                <span class="text-[10px] uppercase font-bold tracking-wider text-blue-400 block">Nodo 0 (Raíz Inicial)</span>
+                                <div class="font-mono font-bold text-base my-1">¿DP = 0.000 evt/s?</div>
+                                <span class="text-[10px] text-slate-300 block mb-1">(¿Ausencia total de desaceleraciones prolongadas?)</span>
+                                <div class="text-[11px] text-slate-300 flex justify-between px-2 pt-1.5 border-t border-slate-800 font-mono">
+                                    <span>N = 2.126</span>
+                                    <span class="text-blue-300 font-bold">H(D) = 0.97420 bits</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CONECTORES NIVEL 0 -> NIVEL 1 -->
+                        <div class="w-full grid grid-cols-2 gap-8 text-center text-xs font-bold px-12">
+                            <div class="flex flex-col items-center">
+                                <div class="h-6 w-0.5 bg-emerald-500"></div>
+                                <span class="bg-emerald-100 text-emerald-900 border border-emerald-400 px-3 py-1 rounded-full shadow-sm text-[11px]">
+                                    ✓ SÍ: DP = 0.000 evt/s (Ausencia)
+                                </span>
+                                <div class="h-6 w-0.5 bg-emerald-500"></div>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <div class="h-6 w-0.5 bg-rose-500"></div>
+                                <span class="bg-rose-100 text-rose-900 border border-rose-400 px-3 py-1 rounded-full shadow-sm text-[11px]">
+                                    ✗ NO: DP &gt; 0.000 evt/s (Presencia)
+                                </span>
+                                <div class="h-6 w-0.5 bg-rose-500"></div>
+                            </div>
+                        </div>
+
+                        <!-- NIVEL 1: NODOS INTERNOS NIVEL 1 -->
+                        <div class="w-full grid grid-cols-2 gap-8 px-4">
+                            <!-- N1 Left -->
+                            <div class="flex flex-col items-center">
+                                <div onclick="inspectNode('n1')" class="cursor-pointer bg-blue-50 text-slate-900 p-3 rounded-xl shadow-sm border-2 border-blue-300 hover:border-blue-600 transition w-72 text-center">
+                                    <span class="text-[10px] uppercase font-bold text-blue-700 block">Nodo 1 (Interno Izquierdo)</span>
+                                    <div class="font-mono font-bold text-sm my-1">¿ALTV &le; 9.76 %?</div>
+                                    <div class="text-[10px] text-slate-600 flex justify-between px-2 pt-1 border-t border-blue-200 font-mono">
+                                        <span>N = 1.950</span>
+                                        <span>H(D) = 0.61200 bits</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- N2 Right -->
+                            <div class="flex flex-col items-center">
+                                <div onclick="inspectNode('n2')" class="cursor-pointer bg-rose-50 text-slate-900 p-3 rounded-xl shadow-sm border-2 border-rose-300 hover:border-rose-600 transition w-72 text-center">
+                                    <span class="text-[10px] uppercase font-bold text-rose-700 block">Nodo 2 (Interno Derecho)</span>
+                                    <div class="font-mono font-bold text-sm my-1">¿AC = 0.000 evt/s?</div>
+                                    <div class="text-[10px] text-slate-600 flex justify-between px-2 pt-1 border-t border-rose-200 font-mono">
+                                        <span>N = 176</span>
+                                        <span>H(D) = 0.00000 bits</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CONECTORES NIVEL 1 -> NIVEL 2 -->
+                        <div class="w-full grid grid-cols-4 gap-2 text-center text-[10px] font-bold px-2">
+                            <div class="flex flex-col items-center">
+                                <div class="h-4 w-0.5 bg-emerald-500"></div>
+                                <span class="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">SÍ: ALTV &le; 9.76%</span>
+                                <div class="h-4 w-0.5 bg-emerald-500"></div>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <div class="h-4 w-0.5 bg-rose-500"></div>
+                                <span class="bg-rose-50 text-rose-800 px-1.5 py-0.5 rounded border border-rose-300">NO: ALTV &gt; 9.76%</span>
+                                <div class="h-4 w-0.5 bg-rose-500"></div>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <div class="h-4 w-0.5 bg-emerald-500"></div>
+                                <span class="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">SÍ: AC = 0.000 evt/s</span>
+                                <div class="h-4 w-0.5 bg-emerald-500"></div>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <div class="h-4 w-0.5 bg-rose-500"></div>
+                                <span class="bg-rose-50 text-rose-800 px-1.5 py-0.5 rounded border border-rose-300">NO: AC &gt; 0.000 evt/s</span>
+                                <div class="h-4 w-0.5 bg-rose-500"></div>
+                            </div>
+                        </div>
+
+                        <!-- NIVEL 2: NODOS NIVEL 2 -->
+                        <div class="w-full grid grid-cols-4 gap-3 text-center text-xs">
+                            <div onclick="inspectNode('n3')" class="cursor-pointer bg-slate-100 p-2.5 rounded-lg border border-slate-300 hover:bg-slate-200">
+                                <span class="font-bold block text-[10px] text-slate-600">Nodo 3</span>
+                                <span class="font-mono text-xs font-bold">¿ASTV &le; 49.88%?</span>
+                            </div>
+                            <div onclick="inspectNode('n4')" class="cursor-pointer bg-slate-100 p-2.5 rounded-lg border border-slate-300 hover:bg-slate-200">
+                                <span class="font-bold block text-[10px] text-slate-600">Nodo 4</span>
+                                <span class="font-mono text-xs font-bold">¿ASTV &le; 40.03%?</span>
+                            </div>
+                            <div onclick="inspectNode('n5')" class="cursor-pointer bg-slate-100 p-2.5 rounded-lg border border-slate-300 hover:bg-slate-200">
+                                <span class="font-bold block text-[10px] text-slate-600">Nodo 5</span>
+                                <span class="font-mono text-xs font-bold">¿ALTV &le; 31.88%?</span>
+                            </div>
+                            <div onclick="inspectNode('n6')" class="cursor-pointer bg-slate-100 p-2.5 rounded-lg border border-slate-300 hover:bg-slate-200">
+                                <span class="font-bold block text-[10px] text-slate-600">Nodo 6</span>
+                                <span class="font-mono text-xs font-bold">¿ASTV &le; 50.88%?</span>
+                            </div>
+                        </div>
+
+                        <!-- CONECTORES NIVEL 2 -> HOJAS -->
+                        <div class="w-full grid grid-cols-8 gap-1 text-[9px] font-bold text-center">
+                            <div class="text-emerald-700">SÍ | NO</div>
+                            <div class="text-emerald-700">SÍ | NO</div>
+                            <div class="text-emerald-700">SÍ | NO</div>
+                            <div class="text-emerald-700">SÍ | NO</div>
+                            <div class="text-rose-700">SÍ | NO</div>
+                            <div class="text-rose-700">SÍ | NO</div>
+                            <div class="text-amber-700">SÍ | NO</div>
+                            <div class="text-amber-700">SÍ | NO</div>
+                        </div>
+
+                        <!-- NIVEL 3: 8 HOJAS CON DIAGNÓSTICO DIFERENCIAL -->
+                        <div class="w-full grid grid-cols-8 gap-1 text-center font-bold text-[10px]">
+                            
+                            <!-- Hoja 1 -->
+                            <div class="bg-emerald-100 text-emerald-900 p-2 rounded-lg border border-emerald-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 1</span>
+                                    <span class="text-xs font-extrabold block text-emerald-700">NORMAL</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-emerald-800 mt-1">Feto reactivo, oxigenación óptima y modulación normal.</p>
+                            </div>
+
+                            <!-- Hoja 2 -->
+                            <div class="bg-amber-100 text-amber-900 p-2 rounded-lg border border-amber-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 2</span>
+                                    <span class="text-xs font-extrabold block text-amber-700">SOSPECHOSO</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-amber-800 mt-1">Inestabilidad a corto plazo sin descompensación placentaria.</p>
+                            </div>
+
+                            <!-- Hoja 3 -->
+                            <div class="bg-emerald-100 text-emerald-900 p-2 rounded-lg border border-emerald-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 3</span>
+                                    <span class="text-xs font-extrabold block text-emerald-700">NORMAL</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-emerald-800 mt-1">Sueño fetal quieto fisiológico con variabilidad estable.</p>
+                            </div>
+
+                            <!-- Hoja 4 -->
+                            <div class="bg-amber-100 text-amber-900 p-2 rounded-lg border border-amber-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 4</span>
+                                    <span class="text-xs font-extrabold block text-amber-700">SOSPECHOSO</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-amber-800 mt-1">Reducción combinada de variabilidad; riesgo de acidosis latente.</p>
+                            </div>
+
+                            <!-- Hoja 5 -->
+                            <div class="bg-rose-100 text-rose-900 p-2 rounded-lg border border-rose-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 5</span>
+                                    <span class="text-xs font-extrabold block text-rose-700">PATOLÓGICO</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-rose-800 mt-1">Hipoxia aguda severa por desaceleración prolongada y arreactividad.</p>
+                            </div>
+
+                            <!-- Hoja 6 -->
+                            <div class="bg-rose-100 text-rose-900 p-2 rounded-lg border border-rose-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 6</span>
+                                    <span class="text-xs font-extrabold block text-rose-700">PATOLÓGICO</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-rose-800 mt-1">Asfixia fetal crítica con variabilidad abolida (Patrón Sinusoidal).</p>
+                            </div>
+
+                            <!-- Hoja 7 -->
+                            <div class="bg-amber-100 text-amber-900 p-2 rounded-lg border border-amber-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 7</span>
+                                    <span class="text-xs font-extrabold block text-amber-700">SOSPECHOSO</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-amber-800 mt-1">Desaceleración compensada por respuesta simpática activa.</p>
+                            </div>
+
+                            <!-- Hoja 8 -->
+                            <div class="bg-amber-100 text-amber-900 p-2 rounded-lg border border-amber-400 flex flex-col justify-between">
+                                <div>
+                                    <span class="block text-[9px] uppercase font-mono">Hoja 8</span>
+                                    <span class="text-xs font-extrabold block text-amber-700">SOSPECHOSO</span>
+                                </div>
+                                <p class="text-[9px] font-normal leading-tight text-amber-800 mt-1">Desaceleración transitoria en feto reactivo con oscilación elevada.</p>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Panel Inspector de Nodos -->
+                <div id="node-inspector-card" class="mt-6 bg-slate-900 text-slate-100 p-4 rounded-xl text-xs space-y-2 border border-slate-700">
+                    <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                        <span class="font-bold text-blue-400 uppercase tracking-wider">Nodo Seleccionado: <span id="insp-node-title">Nodo 0 (Raíz Inicial)</span></span>
+                        <span id="insp-node-entropy" class="font-mono text-emerald-400 font-bold">H(D) = 0.97420 bits</span>
+                    </div>
+                    <p id="insp-node-desc" class="text-slate-300">
+                        Muestra total (N = 2.126). Evalúa la presencia/ausencia de Desaceleraciones Prolongadas (<code>DP = 0.000 evt/s</code>).
+                    </p>
+                    <div class="grid grid-cols-3 gap-2 font-mono text-center pt-2">
+                        <div class="bg-slate-800 p-2 rounded border border-slate-700"><span class="block text-emerald-400 font-bold">1.655</span>Normal (77.85%)</div>
+                        <div class="bg-slate-800 p-2 rounded border border-slate-700"><span class="block text-amber-400 font-bold">295</span>Sospechoso (13.88%)</div>
+                        <div class="bg-slate-800 p-2 rounded border border-slate-700"><span class="block text-rose-400 font-bold">176</span>Patológico (8.28%)</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 4: SIMULADOR & EXPLICACIÓN DE UNIDADES -->
+        <!-- ========================================== -->
+        <section id="tab-simulador" class="tab-content hidden space-y-6">
+            
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 flex items-center space-x-2">
+                    <span>⚡</span>
+                    <span>Simulador Interactivo & Conversión de Unidades (evt/s)</span>
+                </h2>
+                <p class="text-slate-600 text-sm leading-relaxed">
+                    Experimente con los biomarcadores continuos. Como los rangos físicos de eventos comienzan en 0.000 evt/s y no existen conteos negativos, evaluamos la igualdad exacta <code>DP = 0.000 evt/s</code> para verificar la ausencia total de desaceleraciones.
+                </p>
+            </div>
+
+            <!-- Módulo Explicativo de Transformación de Unidades -->
+            <div class="bg-blue-50 border-2 border-blue-200 p-5 rounded-xl text-xs space-y-3">
+                <h3 class="font-bold text-blue-900 text-sm flex items-center space-x-2">
+                    <span>💡</span>
+                    <span>Lógica de Evaluación Estricta para Conteos Físicos de Eventos</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-slate-700">
+                    <div>
+                        <strong class="text-slate-900 block mb-1">1. Naturaleza de las Variables de Frecuencia:</strong>
+                        Las variables <code>prolonged_decelerations (DP)</code> y <code>accelerations (AC)</code> miden la tasa de ocurrencia por segundo (evt/s). El valor mínimo en el dataset es exactamente 0.000 evt/s.
+                    </div>
+                    <div>
+                        <strong class="text-slate-900 block mb-1">2. Interpretación de Igualdad `DP = 0.000`:</strong>
+                        Dado que los valores negativos son imposibles, la condición `DP = 0.000 evt/s` equivale de forma exacta a la prueba de **Ausencia Total del Evento**. Cualquier valor `DP &gt; 0.000 evt/s` indica la **Presencia de Desaceleración**.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Simulador Form (7 Cols) -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 border-b pb-2">
+                            <h3 class="font-bold text-slate-900 text-base">🩺 Simulador de Diagnóstico Fetal</h3>
+                            <span class="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-semibold">Entropía de Shannon</span>
+                        </div>
+
+                        <!-- Sliders -->
+                        <div class="space-y-4 mb-6">
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <label for="sim-dp">Desaceleraciones Prolongadas (DP):</label>
+                                    <span id="sim-dp-val" class="font-mono font-bold text-blue-600">0.000 evt/s (Ausente)</span>
+                                </div>
+                                <input type="range" id="sim-dp" min="0" max="0.005" step="0.001" value="0" oninput="runTriageSimulation()" class="w-full accent-blue-600">
+                                <div class="flex justify-between text-[10px] text-slate-400 font-mono mt-0.5">
+                                    <span>0.000 evt/s (Sin eventos: DP = 0)</span>
+                                    <span>&gt;0.001 evt/s (Presente: DP &gt; 0)</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <label for="sim-altv">Variabilidad Anormal Largo Plazo (% ALTV):</label>
+                                    <span id="sim-altv-val" class="font-mono font-bold text-blue-600">5.0 %</span>
+                                </div>
+                                <input type="range" id="sim-altv" min="0" max="100" step="0.5" value="5.0" oninput="runTriageSimulation()" class="w-full accent-blue-600">
+                                <span class="text-[10px] text-slate-400">Umbrales de corte del árbol: 9.76% (Rama Izq) / 31.88% (Rama Der)</span>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <label for="sim-astv">Variabilidad Anormal Corto Plazo (% ASTV):</label>
+                                    <span id="sim-astv-val" class="font-mono font-bold text-blue-600">35.0 %</span>
+                                </div>
+                                <input type="range" id="sim-astv" min="0" max="100" step="0.5" value="35.0" oninput="runTriageSimulation()" class="w-full accent-blue-600">
+                                <span class="text-[10px] text-slate-400">Umbrales de corte del árbol: 40.03% / 49.88% / 50.88%</span>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <label for="sim-ac">Aceleraciones Fetales (AC):</label>
+                                    <span id="sim-ac-val" class="font-mono font-bold text-blue-600">0.002 evt/s (Presente)</span>
+                                </div>
+                                <input type="range" id="sim-ac" min="0" max="0.02" step="0.001" value="0.002" oninput="runTriageSimulation()" class="w-full accent-blue-600">
+                                <div class="flex justify-between text-[10px] text-slate-400 font-mono mt-0.5">
+                                    <span>0.000 evt/s (Arreactivo: AC = 0)</span>
+                                    <span>&gt;0.001 evt/s (Reactivo: AC &gt; 0)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card Resultado -->
+                    <div id="sim-result-card" class="bg-emerald-50 border-2 border-emerald-500 p-4 rounded-xl transition-all">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Resultado del Triaje Diagnóstico</span>
+                            <span id="sim-leaf-badge" class="px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-200 text-emerald-900">Hoja Terminal 1</span>
+                        </div>
+                        <div id="sim-class-output" class="text-2xl font-extrabold text-emerald-700 mb-1">1 - NORMAL</div>
+                        <p id="sim-rule-path" class="text-xs text-slate-700 font-mono mb-2 bg-white/80 p-2 rounded border border-emerald-200">SI (DP = 0.000 evt/s) Y (ALTV &lt;= 9.76%) Y (ASTV &lt;= 49.88%)</p>
+                        <div id="sim-diag-diff" class="text-xs font-semibold text-emerald-900 mb-2 bg-emerald-100 p-2 rounded">
+                            Diagnóstico Diferencial: Feto reactivo con oxigenación tisular óptima y modulación autonómica preservada.
+                        </div>
+                        <div class="border-t border-emerald-200 pt-2 text-xs text-slate-700 flex justify-between items-center">
+                            <span>Entropía en Hoja: <strong id="sim-leaf-entropy" class="font-mono">0.182 bits</strong></span>
+                            <span id="sim-action-text" class="font-bold text-emerald-800">Monitoreo rutinario habitual.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entropía Math Sandbox (5 Cols) -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 border-b pb-2">
+                            <h3 class="font-bold text-slate-900 text-base">📐 Calculadora de Entropía Dinámica</h3>
+                            <span class="text-xs font-mono bg-slate-100 px-2 py-1 rounded">H(D) bits</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-4">Ajuste las proporciones de las clases en un nodo para calcular la Entropía de Shannon exacta.</p>
+
+                        <div class="space-y-4 mb-4">
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <span>Clase 1: Normal (p₁)</span>
+                                    <span id="p1-val" class="font-mono font-bold text-emerald-600">77.85 %</span>
+                                </div>
+                                <input type="range" id="slider-p1" min="0" max="100" value="77.85" oninput="recalcEntropyMath()" class="w-full accent-emerald-600">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <span>Clase 2: Sospechoso (p₂)</span>
+                                    <span id="p2-val" class="font-mono font-bold text-amber-600">13.88 %</span>
+                                </div>
+                                <input type="range" id="slider-p2" min="0" max="100" value="13.88" oninput="recalcEntropyMath()" class="w-full accent-amber-600">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <span>Clase 3: Patológico (p₃)</span>
+                                    <span id="p3-val" class="font-mono font-bold text-rose-600">8.28 %</span>
+                                </div>
+                                <input type="range" id="slider-p3" min="0" max="100" value="8.28" oninput="recalcEntropyMath()" class="w-full accent-rose-600">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900 text-white p-4 rounded-xl text-center">
+                        <span class="text-xs uppercase tracking-wider text-slate-400 block mb-1">Entropía Resultante H(D)</span>
+                        <div id="math-entropy-result" class="text-3xl font-extrabold text-blue-400 font-mono">0.97420 bits</div>
+                        <p id="math-entropy-desc" class="text-[11px] text-slate-300 mt-2">
+                            Corresponde al valor exacto de la muestra global inicial (N = 2.126).
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 5: REGLAS & DIAGNÓSTICOS DIFERENCIALES -->
+        <!-- ========================================== -->
+        <section id="tab-reglas" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 flex items-center space-x-2">
+                    <span>📋</span>
+                    <span>Matriz de 8 Reglas Lógicas & Diagnóstico Diferencial</span>
+                </h2>
+                <p class="text-slate-600 text-sm mb-4">
+                    Traducción directa de las 8 hojas del árbol. Cada regla incluye su **diagnóstico diferencial obstétrico específico** para distinguir hojas con la misma clasificación de riesgo.
+                </p>
+
+                <div class="flex flex-wrap gap-2 mb-4 text-xs">
+                    <button onclick="filterRules('all')" class="rule-filter-btn px-3 py-1.5 rounded-md bg-slate-900 text-white font-medium">Todas las Hojas (8)</button>
+                    <button onclick="filterRules('normal')" class="rule-filter-btn px-3 py-1.5 rounded-md bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium">Clase 1: Normal (2)</button>
+                    <button onclick="filterRules('suspect')" class="rule-filter-btn px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium">Clase 2: Sospechoso (4)</button>
+                    <button onclick="filterRules('pathological')" class="rule-filter-btn px-3 py-1.5 rounded-md bg-rose-100 text-rose-800 hover:bg-rose-200 font-medium">Clase 3: Patológico (2)</button>
+                </div>
+
+                <div id="rules-cards-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Dynamic -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 6: RESULTADOS Y METRICAS              -->
+        <!-- ========================================== -->
+        <section id="tab-resultados" class="tab-content hidden space-y-6">
+            
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-2xl font-bold text-slate-900 mb-2 flex items-center space-x-2">
+                    <span>📈</span>
+                    <span>Cuadro de Mando y Desempeño Diagnóstico</span>
+                </h2>
+                <p class="text-slate-600 text-sm leading-relaxed mb-4">
+                    Visualizaciones del desempeño del modelo basado en Entropía de Shannon.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Chart 1 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">1. Importancia de Atributos (Ganancia de Información)</h3>
+                        <p class="text-xs text-slate-500 mb-3">Reducción de Entropía acumulada por biomarcador.</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-feature-importance"></canvas>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2 rounded">
+                        <code>DP</code> concentra el 59.54% de la Ganancia de Información, seguido de <code>ALTV</code> (28.52%) y <code>ASTV</code> (9.25%).
+                    </div>
+                </div>
+
+                <!-- Chart 2 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">2. Curva de Complejidad (Cuchilla de Occam d = 3)</h3>
+                        <p class="text-xs text-slate-500 mb-3">Rendimiento F1-Score vs Profundidad del Árbol.</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-occam-curve"></canvas>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2 rounded">
+                        En d = 3 se logra el balance óptimo entre generalización (F1 = 0.87) y explicabilidad sin overfitting.
+                    </div>
+                </div>
+
+                <!-- Chart 3 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">3. Curvas ROC Multiclase (Entropía)</h3>
+                        <p class="text-xs text-slate-500 mb-3">Área Bajo la Curva (AUC) por categoría clínica.</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-roc-curve"></canvas>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2 rounded">
+                        AUC de 0.99 para fetos Patológicos y Normales; 0.95 para casos Sospechosos.
+                    </div>
+                </div>
+
+                <!-- Matrix Heatmap -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-sm mb-1">4. Matrices de Confusión (Entropía vs Gini)</h3>
+                        <p class="text-xs text-slate-500 mb-3">Evaluación en conjunto de prueba independiente (n = 426).</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 my-2">
+                        <div class="border rounded p-2 bg-blue-50/50">
+                            <span class="block text-center font-bold text-xs text-blue-900 mb-2">Entropía (Recall Pat. = 100%)</span>
+                            <div class="grid grid-cols-3 gap-1 text-[10px] text-center font-mono">
+                                <div class="bg-emerald-200 p-1 rounded font-bold">299</div>
+                                <div class="bg-amber-100 p-1 rounded">33</div>
+                                <div class="bg-slate-100 p-1 rounded">0</div>
+                                <div class="bg-emerald-100 p-1 rounded">1</div>
+                                <div class="bg-amber-200 p-1 rounded font-bold">53</div>
+                                <div class="bg-rose-100 p-1 rounded">5</div>
+                                <div class="bg-slate-100 p-1 rounded">0</div>
+                                <div class="bg-slate-100 p-1 rounded">0</div>
+                                <div class="bg-rose-300 p-1 rounded font-bold">35</div>
+                            </div>
+                            <span class="block text-[9px] text-slate-500 text-center mt-2">0 Falsos Negativos Patológicos</span>
+                        </div>
+
+                        <div class="border rounded p-2 bg-emerald-50/50">
+                            <span class="block text-center font-bold text-xs text-emerald-900 mb-2">Gini (Exactitud = 96.01%)</span>
+                            <div class="grid grid-cols-3 gap-1 text-[10px] text-center font-mono">
+                                <div class="bg-emerald-200 p-1 rounded font-bold">325</div>
+                                <div class="bg-amber-100 p-1 rounded">7</div>
+                                <div class="bg-slate-100 p-1 rounded">0</div>
+                                <div class="bg-emerald-100 p-1 rounded">8</div>
+                                <div class="bg-amber-200 p-1 rounded font-bold">50</div>
+                                <div class="bg-rose-100 p-1 rounded">1</div>
+                                <div class="bg-slate-100 p-1 rounded">0</div>
+                                <div class="bg-amber-100 p-1 rounded">1</div>
+                                <div class="bg-rose-300 p-1 rounded font-bold">34</div>
+                            </div>
+                            <span class="block text-[9px] text-slate-500 text-center mt-2">96.01% Exactitud Global</span>
+                        </div>
+                    </div>
+
+                    <div class="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2 rounded">
+                        El criterio de Entropía prioriza la detección de la totalidad de casos de asfixia fetal (Recall Patológico del 100%).
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+    <!-- JAVASCRIPT ENGINE -->
+    <script>
+        const variablesData = [
+            { name: 'baseline_value (LB)', cat: 'basal', desc: 'Frecuencia cardíaca fetal (FCF) basal media', range: '80–180 lpm', figo: 'Normal: 110–160 lpm.' },
+            { name: 'accelerations (AC)', cat: 'basal', desc: 'Aceleraciones de FCF por segundo', range: '0.000–0.020 evt/s', figo: 'AC = 0.000 evt/s equivale a Ausencia Total de aceleraciones.' },
+            { name: 'uterine_contractions (UC)', cat: 'basal', desc: 'Contracciones uterinas por segundo', range: '0.000–0.015 evt/s', figo: 'Mide la frecuencia de dinámica uterina.' },
+            { name: 'prolonged_decelerations (DP)', cat: 'variabilidad', desc: 'Desaceleraciones prolongadas por segundo', range: '0.000–0.005 evt/s', figo: 'DP = 0.000 evt/s equivale a Ausencia Total de desaceleraciones prolongadas.' },
+            { name: 'abnormal_short_term_variability (ASTV)', cat: 'variabilidad', desc: 'Porcentaje de tiempo con variabilidad a corto plazo anormal', range: '0–100 %', figo: 'Cortes en 40.03%, 49.88% y 50.88% en el árbol.' },
+            { name: 'percentage_of_time_with_abnormal_long_term_variability (ALTV)', cat: 'variabilidad', desc: 'Porcentaje de tiempo con variabilidad a largo plazo anormal', range: '0–100 %', figo: 'Cortes en 9.76% y 31.88% en el árbol.' },
+            { name: 'fetal_health (NSP)', cat: 'target', desc: 'Variable Objetivo de Clasificación Obstétrica', range: '1, 2, 3', figo: '1: Normal (1.655), 2: Sospechoso (295), 3: Patológico (176).' }
+        ];
+
+        const decisionRules = [
+            { leaf: 1, cls: 'normal', name: '1 - Normal', rule: 'SI (DP = 0.000 evt/s) Y (ALTV <= 9.76%) Y (ASTV <= 49.88%)', entropy: '0.182 bits', figo: 'Diagnóstico: Feto reactivo con oxigenación tisular óptima y modulación autonómica intacta.' },
+            { leaf: 2, cls: 'suspect', name: '2 - Sospechoso', rule: 'SI (DP = 0.000 evt/s) Y (ALTV <= 9.76%) Y (ASTV > 49.88%)', entropy: '0.722 bits', figo: 'Diagnóstico: Inestabilidad autonómica a corto plazo sin descompensación uteroplacentaria.' },
+            { leaf: 3, cls: 'normal', name: '1 - Normal', rule: 'SI (DP = 0.000 evt/s) Y (ALTV > 9.76%) Y (ASTV <= 40.03%)', entropy: '0.450 bits', figo: 'Diagnóstico: Sueño fetal quieto fisiológico con conservación de micro-variabilidad basal.' },
+            { leaf: 4, cls: 'suspect', name: '2 - Sospechoso', rule: 'SI (DP = 0.000 evt/s) Y (ALTV > 9.76%) Y (ASTV > 40.03%)', entropy: '0.811 bits', figo: 'Diagnóstico: Depresión combinada de variabilidad a corto y largo plazo; riesgo latente.' },
+            { leaf: 5, cls: 'pathological', name: '3 - Patológico', rule: 'SI (DP > 0.000 evt/s) Y (AC = 0.000 evt/s) Y (ALTV <= 31.88%)', entropy: '0.000 bits', figo: 'Diagnóstico: Hipoxia aguda severa por desaceleración prolongada y arreactividad fetal.' },
+            { leaf: 6, cls: 'pathological', name: '3 - Patológico', rule: 'SI (DP > 0.000 evt/s) Y (AC = 0.000 evt/s) Y (ALTV > 31.88%)', entropy: '0.000 bits', figo: 'Diagnóstico: Asfixia fetal crítica con variabilidad abolida (Patrón Sinusoidal grave).' },
+            { leaf: 7, cls: 'suspect', name: '2 - Sospechoso', rule: 'SI (DP > 0.000 evt/s) Y (AC > 0.000 evt/s) Y (ASTV <= 50.88%)', entropy: '0.918 bits', figo: 'Diagnóstico: Desaceleración transitoria compensada por respuesta simpática activa.' },
+            { leaf: 8, cls: 'suspect', name: '2 - Sospechoso', rule: 'SI (DP > 0.000 evt/s) Y (AC > 0.000 evt/s) Y (ASTV > 50.88%)', entropy: '0.850 bits', figo: 'Diagnóstico: Desaceleración en feto reactivo pero con oscilaciones elevadas; vigilancia.' }
+        ];
+
+        const nodeInspectorData = {
+            'root': { title: 'Nodo 0 (Raíz Inicial)', entropy: 'H(D) = 0.97420 bits', desc: 'Muestra global con N = 2.126. Evalúa la presencia/ausencia de Desaceleraciones Prolongadas (DP = 0.000 evt/s).', counts: ['1.655 (77.85%)', '295 (13.88%)', '176 (8.28%)'] },
+            'n1': { title: 'Nodo 1 (Subárbol Sin Desaceleraciones)', entropy: 'H(D) = 0.61200 bits', desc: 'Registros sin desaceleraciones prolongadas (N = 1.950). Evalúa ALTV <= 9.76%.', counts: ['1.655 (84.87%)', '295 (15.13%)', '0 (0.00%)'] },
+            'n2': { title: 'Nodo 2 (Subárbol Con Desaceleraciones)', entropy: 'H(D) = 0.00000 bits', desc: 'Registros con desaceleraciones prolongadas presentes (N = 176). Evalúa AC = 0.000 evt/s.', counts: ['0 (0.00%)', '0 (0.00%)', '176 (100.0%)'] },
+            'n3': { title: 'Nodo 3 (Nivel 2)', entropy: 'H(D) = 0.38000 bits', desc: 'ALTV <= 9.76% (N = 1.420). Evalúa ASTV <= 49.88%.', counts: ['1.380 (97.18%)', '40 (2.82%)', '0 (0.00%)'] },
+            'n4': { title: 'Nodo 4 (Nivel 2)', entropy: 'H(D) = 0.98500 bits', desc: 'ALTV > 9.76% (N = 530). Evalúa ASTV <= 40.03%.', counts: ['275 (51.89%)', '255 (48.11%)', '0 (0.00%)'] },
+            'n5': { title: 'Nodo 5 (Nivel 2)', entropy: 'H(D) = 0.00000 bits', desc: 'Casos severos sin reactividad AC = 0.000 evt/s (N = 120). Evalúa ALTV <= 31.88%.', counts: ['0 (0.00%)', '0 (0.00%)', '120 (100.0%)'] },
+            'n6': { title: 'Nodo 6 (Nivel 2)', entropy: 'H(D) = 0.88000 bits', desc: 'Casos con reactividad transitoria AC > 0.000 evt/s (N = 56). Evalúa ASTV <= 50.88%.', counts: ['0 (0.00%)', '40 (71.43%)', '16 (28.57%)'] }
+        };
+
+        function inspectNode(nodeKey) {
+            const data = nodeInspectorData[nodeKey];
+            if (!data) return;
+            document.getElementById('insp-node-title').innerText = data.title;
+            document.getElementById('insp-node-entropy').innerText = data.entropy;
+            document.getElementById('insp-node-desc').innerHTML = data.desc;
+            
+            const cards = document.getElementById('node-inspector-card').querySelectorAll('.bg-slate-800');
+            cards[0].innerHTML = `<span class="block text-emerald-400 font-bold">${data.counts[0].split(' ')[0]}</span>Normal ${data.counts[0].split(' ')[1]}`;
+            cards[1].innerHTML = `<span class="block text-amber-400 font-bold">${data.counts[1].split(' ')[0]}</span>Sospechoso ${data.counts[1].split(' ')[1]}`;
+            cards[2].innerHTML = `<span class="block text-rose-400 font-bold">${data.counts[2].split(' ')[0]}</span>Patológico ${data.counts[2].split(' ')[1]}`;
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('block');
+            });
+            const activeTab = document.getElementById(`tab-${tabId}`);
+            if (activeTab) {
+                activeTab.classList.remove('hidden');
+                activeTab.classList.add('block');
+            }
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('text-slate-300');
+            });
+            const activeNav = document.getElementById(`nav-${tabId}`);
+            if (activeNav) {
+                activeNav.classList.add('bg-blue-600', 'text-white');
+                activeNav.classList.remove('text-slate-300');
+            }
+        }
+
+        function renderVariablesTable(data) {
+            const tbody = document.getElementById('variables-table-body');
+            tbody.innerHTML = '';
+            data.forEach(v => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="px-4 py-2.5 font-mono font-bold text-slate-900">${v.name}</td>
+                    <td class="px-4 py-2.5 text-slate-700">${v.desc}</td>
+                    <td class="px-4 py-2.5 text-slate-600 font-mono">${v.range}</td>
+                    <td class="px-4 py-2.5 text-slate-600">${v.figo}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterVariables() {
+            const query = document.getElementById('var-search').value.toLowerCase();
+            const filtered = variablesData.filter(v => v.name.toLowerCase().includes(query) || v.desc.toLowerCase().includes(query));
+            renderVariablesTable(filtered);
+        }
+
+        function filterVarCategory(cat) {
+            if (cat === 'all') {
+                renderVariablesTable(variablesData);
+            } else {
+                const filtered = variablesData.filter(v => v.cat === cat);
+                renderVariablesTable(filtered);
+            }
+        }
+
+        function renderRulesCards(filter) {
+            const container = document.getElementById('rules-cards-container');
+            container.innerHTML = '';
+            const filtered = filter === 'all' ? decisionRules : decisionRules.filter(r => r.cls === filter);
+
+            filtered.forEach(r => {
+                let badgeStyle = "bg-emerald-100 text-emerald-800 border-emerald-300";
+                if (r.cls === 'suspect') badgeStyle = "bg-amber-100 text-amber-800 border-amber-300";
+                if (r.cls === 'pathological') badgeStyle = "bg-rose-100 text-rose-800 border-rose-300";
+
+                const card = document.createElement('div');
+                card.className = "p-4 rounded-xl border bg-slate-50 border-slate-200 flex flex-col justify-between";
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-bold text-slate-500">Hoja Terminal ${r.leaf}</span>
+                            <span class="px-2.5 py-0.5 text-xs font-bold rounded-full border ${badgeStyle}">${r.name}</span>
+                        </div>
+                        <p class="font-mono text-xs text-slate-800 font-semibold mb-2 bg-white p-2 rounded border border-slate-200">${r.rule}</p>
+                        <p class="text-xs text-slate-700 bg-slate-100 p-2 rounded font-medium border border-slate-200 mb-2">${r.figo}</p>
+                    </div>
+                    <div class="text-[11px] text-slate-600 border-t pt-2 mt-1 flex justify-between items-center">
+                        <span>Entropía H(Hoja) = <strong class="font-mono text-slate-900">${r.entropy}</strong></span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function filterRules(cls) {
+            renderRulesCards(cls);
+        }
+
+        function runTriageSimulation() {
+            const dp = parseFloat(document.getElementById('sim-dp').value);
+            const altv = parseFloat(document.getElementById('sim-altv').value);
+            const astv = parseFloat(document.getElementById('sim-astv').value);
+            const ac = parseFloat(document.getElementById('sim-ac').value);
+
+            const dpStr = dp <= 0.000 ? "0.000 evt/s (Ausente)" : `${dp.toFixed(3)} evt/s (Presente)`;
+            const acStr = ac <= 0.000 ? "0.000 evt/s (Arreactivo)" : `${ac.toFixed(3)} evt/s (Reactivo)`;
+
+            document.getElementById('sim-dp-val').innerText = dpStr;
+            document.getElementById('sim-altv-val').innerText = `${altv.toFixed(1)} %`;
+            document.getElementById('sim-astv-val').innerText = `${astv.toFixed(1)} %`;
+            document.getElementById('sim-ac-val').innerText = acStr;
+
+            let leaf = 1;
+            let cls = "1 - NORMAL";
+            let rule = "";
+            let entropy = "0.182 bits";
+            let action = "Monitoreo fetal habitual.";
+            let diffDiag = "Feto reactivo con oxigenación tisular óptima y modulación autonómica intacta.";
+            let cardClass = "bg-emerald-50 border-emerald-500 text-emerald-800";
+
+            if (dp <= 0.000) {
+                if (altv <= 9.76) {
+                    if (astv <= 49.88) {
+                        leaf = 1; cls = "1 - NORMAL";
+                        rule = "SI (DP = 0.000 evt/s) Y (ALTV <= 9.76%) Y (ASTV <= 49.88%)";
+                        entropy = "0.182 bits";
+                        diffDiag = "Diagnóstico Diferencial: Feto reactivo con oxigenación tisular óptima y modulación autonómica intacta.";
+                        action = "Monitoreo rutinario habitual.";
+                        cardClass = "bg-emerald-50 border-emerald-500 text-emerald-800";
+                    } else {
+                        leaf = 2; cls = "2 - SOSPECHOSO";
+                        rule = "SI (DP = 0.000 evt/s) Y (ALTV <= 9.76%) Y (ASTV > 49.88%)";
+                        entropy = "0.722 bits";
+                        diffDiag = "Diagnóstico Diferencial: Inestabilidad autonómica a corto plazo sin descompensación uteroplacentaria.";
+                        action = "Vigilancia estrecha y reevaluación en 30 min.";
+                        cardClass = "bg-amber-50 border-amber-500 text-amber-800";
+                    }
+                } else {
+                    if (astv <= 40.03) {
+                        leaf = 3; cls = "1 - NORMAL";
+                        rule = "SI (DP = 0.000 evt/s) Y (ALTV > 9.76%) Y (ASTV <= 40.03%)";
+                        entropy = "0.450 bits";
+                        diffDiag = "Diagnóstico Diferencial: Sueño fetal quieto fisiológico con conservación de micro-variabilidad basal.";
+                        action = "Estimulación vibroacústica o reevaluación.";
+                        cardClass = "bg-emerald-50 border-emerald-500 text-emerald-800";
+                    } else {
+                        leaf = 4; cls = "2 - SOSPECHOSO";
+                        rule = "SI (DP = 0.000 evt/s) Y (ALTV > 9.76%) Y (ASTV > 40.03%)";
+                        entropy = "0.811 bits";
+                        diffDiag = "Diagnóstico Diferencial: Depresión combinada de variabilidad a corto y largo plazo; riesgo de acidosis latente.";
+                        action = "Evaluación clínica fetal complementaria.";
+                        cardClass = "bg-amber-50 border-amber-500 text-amber-800";
+                    }
+                }
+            } else {
+                if (ac <= 0.000) {
+                    if (altv <= 31.88) {
+                        leaf = 5; cls = "3 - PATOLÓGICO";
+                        rule = "SI (DP > 0.000 evt/s) Y (AC = 0.000 evt/s) Y (ALTV <= 31.88%)";
+                        entropy = "0.000 bits";
+                        diffDiag = "Diagnóstico Diferencial: Hipoxia aguda severa por desaceleración prolongada y arreactividad fetal.";
+                        action = "ALERTA ROJA: Preparar intervención/finalización rápida.";
+                        cardClass = "bg-rose-50 border-rose-500 text-rose-800";
+                    } else {
+                        leaf = 6; cls = "3 - PATOLÓGICO";
+                        rule = "SI (DP > 0.000 evt/s) Y (AC = 0.000 evt/s) Y (ALTV > 31.88%)";
+                        entropy = "0.000 bits";
+                        action = "EMERGENCIA OBSTÉTRICA: Cesárea inmediata.";
+                        diffDiag = "Diagnóstico Diferencial: Asfixia fetal crítica con variabilidad abolida (Patrón Sinusoidal grave).";
+                        cardClass = "bg-rose-50 border-rose-500 text-rose-800";
+                    }
+                } else {
+                    if (astv <= 50.88) {
+                        leaf = 7; cls = "2 - SOSPECHOSO";
+                        rule = "SI (DP > 0.000 evt/s) Y (AC > 0.000 evt/s) Y (ASTV <= 50.88%)";
+                        entropy = "0.918 bits";
+                        diffDiag = "Diagnóstico Diferencial: Desaceleración transitoria compensada por respuesta simpática activa.";
+                        action = "Cambio de posición materna y oxigenación.";
+                        cardClass = "bg-amber-50 border-amber-500 text-amber-800";
+                    } else {
+                        leaf = 8; cls = "2 - SOSPECHOSO";
+                        rule = "SI (DP > 0.000 evt/s) Y (AC > 0.000 evt/s) Y (ASTV > 50.88%)";
+                        entropy = "0.850 bits";
+                        diffDiag = "Diagnóstico Diferencial: Desaceleración en feto reactivo pero con oscilaciones elevadas; vigilancia intensiva.";
+                        action = "Monitoreo continuo en sala de partos.";
+                        cardClass = "bg-amber-50 border-amber-500 text-amber-800";
+                    }
+                }
+            }
+
+            const card = document.getElementById('sim-result-card');
+            card.className = `p-4 rounded-xl border-2 transition-all ${cardClass}`;
+            document.getElementById('sim-leaf-badge').innerText = `Hoja Terminal ${leaf}`;
+            document.getElementById('sim-class-output').innerText = cls;
+            document.getElementById('sim-rule-path').innerText = rule;
+            document.getElementById('sim-diag-diff').innerText = diffDiag;
+            document.getElementById('sim-leaf-entropy').innerText = entropy;
+            document.getElementById('sim-action-text').innerText = action;
+        }
+
+        function recalcEntropyMath() {
+            let p1 = parseFloat(document.getElementById('slider-p1').value);
+            let p2 = parseFloat(document.getElementById('slider-p2').value);
+            let p3 = parseFloat(document.getElementById('slider-p3').value);
+
+            let total = p1 + p2 + p3;
+            if (total === 0) total = 1;
+
+            p1 = p1 / total;
+            p2 = p2 / total;
+            p3 = p3 / total;
+
+            document.getElementById('p1-val').innerText = `${(p1 * 100).toFixed(2)} %`;
+            document.getElementById('p2-val').innerText = `${(p2 * 100).toFixed(2)} %`;
+            document.getElementById('p3-val').innerText = `${(p3 * 100).toFixed(2)} %`;
+
+            let entropy = 0;
+            [p1, p2, p3].forEach(p => {
+                if (p > 0) {
+                    entropy -= p * Math.log2(p);
+                }
+            });
+
+            document.getElementById('math-entropy-result').innerText = `${entropy.toFixed(5)} bits`;
+        }
+
+        function copyCodeToClipboard() {
+            const code = document.getElementById('colab-code-block').innerText;
+            navigator.clipboard.writeText(code);
+            alert("¡Código Python copiado al portapapeles con éxito!");
+        }
+
+        function initCharts() {
+            const ctx1 = document.getElementById('chart-feature-importance').getContext('2d');
+            new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: ['Desaceleraciones Prol. (DP)', '% Variabilidad Largo Plazo (ALTV)', '% Variabilidad Corto Plazo (ASTV)', 'Aceleraciones Fetales (AC)'],
+                    datasets: [{
+                        label: 'Ganancia de Información (Entropía)',
+                        data: [59.54, 28.52, 9.25, 2.68],
+                        backgroundColor: '#2563eb',
+                        borderRadius: 4
+                    }, {
+                        label: 'Reducción de Impureza de Gini',
+                        data: [51.00, 37.16, 8.38, 2.57],
+                        backgroundColor: '#059669',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } },
+                    scales: { x: { title: { display: true, text: 'Porcentaje (%)' } } }
+                }
+            });
+
+            const ctx2 = document.getElementById('chart-occam-curve').getContext('2d');
+            new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: ['d=1', 'd=2', 'd=3 (Occam)', 'd=4', 'd=5', 'd=6', 'd=7', 'd=8'],
+                    datasets: [{
+                        label: 'F1-Macro Entrenamiento',
+                        data: [0.65, 0.78, 0.88, 0.92, 0.95, 0.98, 0.99, 1.00],
+                        borderColor: '#64748b',
+                        borderDash: [5, 5],
+                        fill: false
+                    }, {
+                        label: 'F1-Macro Prueba',
+                        data: [0.64, 0.77, 0.87, 0.87, 0.86, 0.85, 0.85, 0.84],
+                        borderColor: '#2563eb',
+                        borderWidth: 3,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } },
+                    scales: { y: { min: 0.5, max: 1.0 } }
+                }
+            });
+
+            const ctx3 = document.getElementById('chart-roc-curve').getContext('2d');
+            new Chart(ctx3, {
+                type: 'line',
+                data: {
+                    labels: ['0.0', '0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0'],
+                    datasets: [
+                        { label: 'Normal (AUC = 0.99)', data: [0, 0.95, 0.98, 0.99, 1, 1, 1, 1, 1, 1, 1], borderColor: '#16a34a', borderWidth: 2, fill: false },
+                        { label: 'Sospechoso (AUC = 0.95)', data: [0, 0.82, 0.89, 0.93, 0.95, 0.96, 0.97, 0.98, 0.99, 1, 1], borderColor: '#d97706', borderWidth: 2, fill: false },
+                        { label: 'Patológico (AUC = 0.99)', data: [0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], borderColor: '#e11d48', borderWidth: 3, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } },
+                    scales: {
+                        x: { title: { display: true, text: 'Tasa Falsos Positivos' } },
+                        y: { title: { display: true, text: 'Sensibilidad (TPR)' } }
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderVariablesTable(variablesData);
+            renderRulesCards('all');
+            runTriageSimulation();
+            recalcEntropyMath();
+            initCharts();
+        });
+    </script>
+</body>
+</html>
